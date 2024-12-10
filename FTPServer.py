@@ -93,7 +93,7 @@ Supported commands:
   QUIT                                           - Disconnect from the server\n
 """
 
- Map of permission types for files-------------------------------------------------------------------------------------
+#Map of permission types for files-------------------------------------------------------------------------------------
 PERMISSIONS_MAP = {
     "Read": con.FILE_GENERIC_READ,
     "Write": con.FILE_GENERIC_WRITE,
@@ -134,9 +134,12 @@ def set_permissions_windows(file_name, username, permission):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+def handle_help(user_state, client_socket):
+    """Displays a list of available commands based on user role."""
+    level = user_state['level']
+    commands = ADMIN_COMMANDS if level == LEVEL['1'] or level == LEVEL['2'] else USER_COMMANDS
 
-
-
+    client_socket.sendall(f"{commands}\n".encode(FORMAT))
 
 
 # Main Client Handler --------------------------------------------------------------------------------------------------
