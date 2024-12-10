@@ -187,7 +187,7 @@ def get_permissions(file_name, client_socket):
         client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
 
 
-# Command handlers for various FTP operations---------------------------------------------------------------------------
+#Command handlers for various FTP operations---------------------------------------------------------------------------
 def handle_help(user_state, client_socket):
     """Displays a list of available commands based on user role."""
     level = user_state['level']
@@ -196,7 +196,7 @@ def handle_help(user_state, client_socket):
     client_socket.sendall(f"{commands}\n".encode(FORMAT))
 
 
-# -----------------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------------
 def handle_setacl(command_parts, client_socket, user_state):
     """
     Handles the SETACL command to modify file permissions.
@@ -278,7 +278,7 @@ def change_user_level(command_parts, user_state, client_socket):
     client_socket.sendall(f"250 User '{target_user}' level changed to '{LEVEL.get(new_level)}'.\n".encode(FORMAT))
 
 
-# -----------------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------------
 def create_user_folders(user_state):
     file_name, par = utilities.resolve_path(BASE_DIRECTORY, user_state['username'])
     if os.path.isdir(file_name):
@@ -310,7 +310,7 @@ def create_user_folders(user_state):
     set_permissions_windows(download_directory, user_state['username'], "Full")
 
 
-#     -----------------------------------------------------------------------------------------------------------------------
+  #  -----------------------------------------------------------------------------------------------------------------------
 
 
 def sign_up(command_parts, user_state, client_socket):
@@ -539,3 +539,328 @@ def handle_stor(user_state, command_parts, client_socket, data_socket):
     finally:
         file_lock.release()
         IS_TRANSFERRING[client_socket] = False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def delete_assistor(path, client_socket):
+    file_lock = get_file_lock(path)
+
+    try:
+        if not file_lock.acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{path}' is busy. Try again later.".encode(FORMAT))
+            return
+        perm_file = f'{path}.perm'
+        os.remove(path)
+        os.remove(perm_file)
+        client_socket.sendall(f"250 File deleted successfully\n".encode(FORMAT))
+    except Exception as e:
+        print(f"Error in DELETE: {e}")
+        client_socket.sendall(f"450 File deletion failed\n".encode(FORMAT))
+    finally:
+        file_lock.release()
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_delete(user_state, command_parts, client_socket):  # todo: lock ro ok konnnnnnnnnnnnnnn
+    """Deletes a specified file."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+
+    public_path, user_state['current_directory'] = utilities.resolve_path(user_state['current_directory'],
+                                                                          command_parts[1])
+    user_dir = os.path.join(user_state['current_directory'], user_state['username'])
+    private_path, user_state['current_directory'] = utilities.resolve_path(user_dir, command_parts[1])
+
+    is_public_file = os.path.isfile(public_path)
+    is_private_file = os.path.isfile(private_path)
+    public_permission = None
+    private_permission = None
+
+    if is_public_file:
+        public_permission = check_permission(public_path, user_state, 'Delete')
+
+    if is_private_file:
+        private_permission = check_permission(private_path, user_state, 'Delete')
+
+    if not is_public_file and not is_private_file:
+        client_socket.sendall(f"550 File not found\n".encode(FORMAT))
+        return
+    # ------------------------------------------------------------------------------------------------------------------
+    if public_permission:
+        delete_assistor(client_socket=client_socket, path=public_path)
+
+    if private_permission:
+        # just private
+        delete_assistor(client_socket=client_socket, path=private_path)
+
+    if not public_permission and not private_permission:
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_mkd(user_state, command_parts, client_socket):
+    """Creates a new directory."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+    # todo: mishe check kard agar akharesh esm user bod dige ezafe nakone
+    user_folder = os.path.join(user_state['current_directory'], user_state['username'])
+    dir_path, parent = utilities.resolve_path(user_folder, command_parts[1])
+    if not check_permission(parent, user_state, 'Create Subdirectory'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+    try:
+        os.makedirs(dir_path)
+        set_permissions_windows(dir_path, user_state['username'], "Full")
+        client_socket.sendall(f"257 Directory created successfully\n".encode(FORMAT))
+        user_state['current_directory'] = dir_path
+    except Exception as e:
+        print(f"Error in MKD: {e}")
+        client_socket.sendall(f"550 Unable to create directory\n".encode(FORMAT))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_rmd(user_state, command_parts, client_socket):  # todo: lock ro ok konnnnnnnnnnnnnnn   alan fek konam okeye
+    """Removes an existing directory."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+    parent_dir = os.path.dirname(user_state['current_directory'])
+    dir_path, parent = utilities.resolve_path(parent_dir, command_parts[1])
+    if not check_permission(dir_path, user_state, 'Delete'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+    if not os.path.isdir(dir_path):
+        client_socket.sendall(f"550 Directory not found\n".encode(FORMAT))
+        return
+
+    file_locks = {}
+    for item in os.listdir(dir_path):
+        item_path = os.path.join(dir_path, item)
+        file_locks[str(item)] = get_file_lock(item_path)
+        if not file_locks[str(item)].acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{item_path}' is busy. Try again later.".encode(FORMAT))
+            return
+
+    try:
+        os.rmdir(dir_path)
+        perm_file = f'{dir_path}.perm'
+        os.remove(perm_file)
+        client_socket.sendall(f"250 Directory removed successfully\n".encode(FORMAT))
+        user_state['current_directory'] = parent
+    except OSError:
+        client_socket.sendall(f"550 Directory not empty or cannot be removed\n".encode(FORMAT))
+    finally:
+        for item in file_locks.values():
+            item.release()
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_pwd(user_state, client_socket):
+    """Outputs the current working directory."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    client_socket.sendall(f'257 "{user_state["current_directory"]}"\n'.encode(FORMAT))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_cwd(user_state, command_parts, client_socket):
+    """Changes the current working directory."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+
+    file_name, par = utilities.resolve_path(user_state['current_directory'], command_parts[1])
+    if not os.path.isdir(file_name):
+        client_socket.sendall(f"550 Directory not found\n".encode(FORMAT))
+        return
+
+    if not check_permission(file_name, user_state, 'Read'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    user_state['current_directory'] = file_name
+    client_socket.sendall(f"250 Directory changed successfully\n".encode(FORMAT))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_cdup(user_state, client_socket):
+    """Moves to the parent directory."""
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    parent_dir = os.path.dirname(user_state['current_directory'])
+    if not os.path.isdir(parent_dir):
+        client_socket.sendall(f"550 Cannot change to parent directory\n".encode(FORMAT))
+        return
+
+    if not check_permission(parent_dir, user_state, 'Read'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    user_state['current_directory'] = parent_dir
+    client_socket.sendall(f"250 Directory changed to parent successfully\n".encode(FORMAT))
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Main Client Handler --------------------------------------------------------------------------------------------------
+
+def handle_client(client_socket, data_socket, addr):
+    """Manages the lifecycle of a client connection."""
+    user_state = {
+        'username': None,
+        'authenticated': False,
+        'status': None,
+        'current_directory': BASE_DIRECTORY,
+        'level': None
+    }
+
+    client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
+
+    connected = True
+    while connected:
+        try:
+            msg_length = client_socket.recv(HEADER).decode(FORMAT)
+            if msg_length:
+                msg_length = int(msg_length)
+                command = client_socket.recv(msg_length).decode(FORMAT)
+                print(f"[{addr}] said: {command}\n")
+                command_parts = command.split()
+                cmd = command_parts[0].upper()
+
+                if cmd == "SIGNUP":
+                    user_state = sign_up(command_parts, user_state, client_socket)
+                elif cmd == "USER":
+                    user_state = handle_user(command_parts, user_state, client_socket)
+                elif cmd == "PASS":
+                    user_state = handle_pass(command_parts, user_state, client_socket)
+                elif cmd == "LIST":
+                    handle_list(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "RETR":
+                    handle_retr(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "STOR":
+                    handle_stor(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "DELE":
+                    handle_delete(user_state, command_parts, client_socket)
+                elif cmd == "MKD":
+                    handle_mkd(user_state, command_parts, client_socket)
+                elif cmd == "RMD":
+                    handle_rmd(user_state, command_parts, client_socket)
+                elif cmd == "PWD":
+                    handle_pwd(user_state, client_socket)
+                elif cmd == "CWD":
+                    handle_cwd(user_state, command_parts, client_socket)
+                elif cmd == "CDUP":
+                    handle_cdup(user_state, client_socket)
+                elif cmd == "SETACL" and user_state['level'] == LEVEL.get('1'):
+                    handle_setacl(command_parts, client_socket, user_state)
+                elif cmd == "CHANGELEVEL" and user_state['level'] == LEVEL.get('1'):
+                    change_user_level(command_parts, user_state, client_socket)
+                elif cmd == "HELP":
+                    handle_help(user_state, client_socket)
+                elif cmd == "QUIT":
+                    if IS_TRANSFERRING[client_socket]:
+                        client_socket.sendall(f"[WARNING!] Cannot quit during file transfer.\n".encode(FORMAT))
+                    else:
+                        client_socket.sendall(f"221 Goodbye\n".encode(FORMAT))
+                        connected = False
+                else:
+                    client_socket.sendall(f"502 Command not implemented\n".encode(FORMAT))
+        except Exception as e:
+            print(f"Error handling client {addr}: {e}")
+            connected = False
+
+    client_socket.close()
+    print(f"[DISCONNECTED] {addr} disconnected.")
+    current_thread = threading.current_thread()
+    # ZOMBIE_THREADS[str(current_thread)] = current_thread
+
+
+#Main Server-----------------------------------------------------------------------------------------------------------
+
+def start_server():
+    global ENCRYPTION_MODE
+    """
+    Starts the FTP server, listens for connections, and spawns client threads.
+    """
+    control_socket = None
+    data_socket = None
+
+    if ENCRYPTION_MODE == "SSL":
+        control_socket = SSL_Encryption.ssl_control_connection_server()
+        data_socket = SSL_Encryption.ssl_data_connection_server()
+
+    if ENCRYPTION_MODE == "SSL/TLS":
+        control_socket = SSL_TLS_Encryption.ssl_tls_control_connection_server()
+        data_socket = SSL_TLS_Encryption.ssl_tls_data_connection_server()
+
+    elif ENCRYPTION_MODE == "SSH":  # todo;fix this shit
+        pass
+
+    elif ENCRYPTION_MODE == "TLS":
+        control_socket = TLS_Encryption.tls_control_connection_server()
+        data_socket = TLS_Encryption.tls_data_connection_server()
+
+    else:  # its PLAIN mode without any encryption protocol
+        control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    control_socket.bind((SERVER_IP, CONTROL_PORT))
+    data_socket.bind((SERVER_IP, DATA_PORT))
+    control_socket.listen()
+    data_socket.listen()
+
+    print(
+        f"{FTP_TYPE} is listening. Control on {SERVER_IP}:{CONTROL_PORT}, Data on {SERVER_IP}:{DATA_PORT}")
+
+    try:
+        while True:
+            client_socket, addr = control_socket.accept()
+            print(f"[NEW CONNECTION] {addr} connected.")
+            thread = threading.Thread(target=handle_client, args=(client_socket, data_socket, addr))
+            thread.start()
+            print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
+            for thread in list(ZOMBIE_THREADS):  # Copy keys to avoid dictionary modification during iteration
+                if not ZOMBIE_THREADS[thread].is_alive():
+                    ZOMBIE_THREADS[thread].join()  # Join the finished client thread
+                    del ZOMBIE_THREADS[thread]
+
+    except KeyboardInterrupt:
+        print("\n[SHUTDOWN] Server is shutting down.")
+    finally:
+        control_socket.close()
+        data_socket.close()
+
+
+# -----------------------------------------------------------------------------------------------------------------------
+if __name__ == "__main__":
+    start_server()
