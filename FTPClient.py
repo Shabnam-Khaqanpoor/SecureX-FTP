@@ -71,8 +71,74 @@ response_condition = threading.Condition()  # Condition variable for response sy
 shared_response = None  # Stores the latest response from the server
 
 
+# Handles the STOR command to upload a file-----------------------------------------------------------------------------
 
-# # Main client function with threading-----------------------------------------------------------------------------------
+def handle_stor(control_socket, origin_path, destination):
+    """
+    Sends the STOR command to upload a file to the server.
+    Ensures the file exists before attempting the upload.
+    """
+    global CURRENT_DIRECTORY
+    origin_path, par = utilities.resolve_path(CURRENT_DIRECTORY, origin_path)
+    if not os.path.isfile(origin_path):
+        origin_path = par
+
+        if not os.path.isfile(origin_path):
+            print(f"File '{origin_path}' does not exist.")
+            return
+
+    filename = os.path.basename(origin_path)
+    response = send_command(control_socket, f"STOR {filename} {destination}")
+    if response:
+        if response.startswith("150"):
+            data_socket = create_data_socket()  # New socket for data transfer
+            data_socket.connect((SERVER_IP, DATA_PORT))
+            with open(origin_path, 'rb') as file:
+                while chunk := file.read(1024):
+                    data_socket.sendall(chunk)
+                data_socket.close()
+                print(f"File '{filename}' uploaded successfully.")
+                CURRENT_DIRECTORY = origin_path
+        else:
+            print(f"Error: {response}")
+
+
+# Function to handle user input and send messages-----------------------------------------------------------------------
+def send_message(control_socket):
+    global CURRENT_DIRECTORY
+    """
+    Reads user input, processes commands, and sends them to the server.
+    Includes command-specific handlers for file operations.
+    """
+    authentication_help()
+    while True:
+        try:
+            command = input("ftp> ").strip()
+            order = command.split(" ")[0]
+            if order.upper() == "QUIT":
+                send_command(control_socket, DISCONNECT_MESSAGE)
+                print("Disconnecting...")
+                break
+            elif order.upper() == "LIST":
+                handle_list(control_socket)
+            elif order.upper().startswith("RETR"):
+                _, filename = command.split(maxsplit=1)
+                handle_retr(control_socket, filename)
+            elif order.upper().startswith("STOR"):
+                _, filepath, destination = command.split(maxsplit=2)
+                handle_stor(control_socket, filepath, destination)
+            elif order.upper() == "DELE" or "SIGNUP" or "USER" or "PASS" or "CWD" or "CDUP" or "PWD" or "MKD" or "RMD" or "HELP" or "SETACL" or "CHANGELEVEL":
+                if order.upper() == "USER":
+                    if CURRENT_DIRECTORY == 'D:\\network\\FTP\\FTP\\client-folder':
+                        username = command.split(maxsplit=1)[1]
+                        CURRENT_DIRECTORY += f'\\{username}'
+                handle_control_socket(control_socket, command)
+
+        except Exception as e:
+            print("502 Command not implemented\n")
+
+
+# # Main client function with threading---------------------------------------------------------------------------------
 def client():
     """
     Entry point for the client.

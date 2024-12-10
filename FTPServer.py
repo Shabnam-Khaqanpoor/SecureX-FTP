@@ -15,6 +15,7 @@ LEVEL = {
     '4': 'Normal'
 }
 
+
 # Registered users with associated roles and credentials----------------------------------------------------------------
 VALID_USERS = {
     'user1': {'password': 'password1',
@@ -98,6 +99,7 @@ def handle_client(client_socket, data_socket, addr):
     print(f"[DISCONNECTED] {addr} disconnected.")
     current_thread = threading.current_thread()
     ZOMBIE_THREADS[str(current_thread)] = current_thread
+
 
 def start_server():
     global ENCRYPTION_MODE
