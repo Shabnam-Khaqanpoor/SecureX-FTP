@@ -9,6 +9,10 @@ def resolve_path(user_directory, path):
         directory = os.path.dirname(path)
         return user_directory, directory
 
+    # elif os.path.isabs(path):
+    #     directory= os.path.dirname(path)
+    #     return path,directory
+
     try:
         if not os.path.isabs(path):
             resolved_path = os.path.join(user_directory, path)

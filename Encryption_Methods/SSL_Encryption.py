@@ -1,5 +1,5 @@
 import socket
-import FTPServer
+import server_test
 import ssl
 
 SERVER_CONTEXT = ssl.SSLContext(
@@ -28,7 +28,7 @@ def ssl_data_connection_server():
 # -----------------------------------------------------------------------------------------------------------------------
 def ssl_control_connection_client():
     raw_control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    control_socket = CLIENT_CONTEXT.wrap_socket(raw_control_socket, server_hostname=FTPServer.SERVER_IP)
+    control_socket = CLIENT_CONTEXT.wrap_socket(raw_control_socket, server_hostname=server_test.SERVER_IP)
     return control_socket
 
 
@@ -36,5 +36,5 @@ def ssl_control_connection_client():
 
 def ssl_data_connection_client():
     raw_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    data_socket = CLIENT_CONTEXT.wrap_socket(raw_data_socket, server_hostname=FTPServer.SERVER_IP)
+    data_socket = CLIENT_CONTEXT.wrap_socket(raw_data_socket, server_hostname=server_test.SERVER_IP)
     return data_socket
