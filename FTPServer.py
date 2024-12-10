@@ -141,6 +141,44 @@ def handle_help(user_state, client_socket):
 
     client_socket.sendall(f"{commands}\n".encode(FORMAT))
 
+def handle_list(user_state, command_parts, client_socket, data_socket):
+    """Lists files in the current or specified directory."""
+    global IS_TRANSFERRING
+
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    directory = user_state['current_directory']
+    if len(command_parts) > 1:
+        _, directory = utilities.resolve_path(directory, command_parts[1])
+
+    if not os.path.isdir(directory):
+        client_socket.sendall(f"550 Directory not found\n".encode(FORMAT))
+        return
+
+    client_socket.sendall(f"125 Here comes the directory listing\n".encode(FORMAT))
+    conn, addr = data_socket.accept()  # Accept the data connection
+    try:
+        IS_TRANSFERRING[client_socket] = True
+        for item in os.listdir(directory):
+            if item.endswith('.perm'):
+                continue
+            item_path = os.path.join(directory, item)
+            permissions = get_permissions(item_path, client_socket)
+            size = os.path.getsize(item_path)
+            mod_time = datetime.fromtimestamp(os.path.getmtime(item_path)).strftime("%b %d %H:%M")
+            conn.sendall(
+                f"permissions: {permissions}     size: {size}     modified time: {mod_time}     items: {item}\n".encode(
+                    FORMAT))
+        conn.close()
+        client_socket.sendall(f"226 Directory send OK\n".encode(FORMAT))
+    except Exception as e:
+        print(f"Error in LIST: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
+    finally:
+        IS_TRANSFERRING[client_socket] = False
+
 
 # Main Client Handler --------------------------------------------------------------------------------------------------
 
