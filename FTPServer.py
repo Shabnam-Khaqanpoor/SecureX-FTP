@@ -262,7 +262,35 @@ def change_user_level(command_parts, user_state, client_socket):
     VALID_USERS[target_user]['level'] = LEVEL.get(new_level)
     client_socket.sendall(f"250 User '{target_user}' level changed to '{LEVEL.get(new_level)}'.\n".encode(FORMAT))
 
+def create_user_folders(user_state):
+    file_name, par = utilities.resolve_path(BASE_DIRECTORY, user_state['username'])
+    if os.path.isdir(file_name):
+        return
 
+    upload_directory = os.path.join(BASE_DIRECTORY, user_state['username'])
+    if not os.path.exists(upload_directory):
+        os.makedirs(upload_directory)
+    if user_state['level'] == LEVEL.get('1'):
+        set_permissions_windows(upload_directory, user_state['username'], "Full")
+    elif user_state['level'] == LEVEL.get('2'):
+        set_permissions_windows(upload_directory, user_state['username'], "Read")
+        set_permissions_windows(upload_directory, user_state['username'], "Write")
+        set_permissions_windows(upload_directory, user_state['username'], "Delete")
+        set_permissions_windows(upload_directory, user_state['username'], "Create File")
+    elif user_state['level'] == LEVEL.get('3'):
+        set_permissions_windows(upload_directory, user_state['username'], "Read")
+        set_permissions_windows(upload_directory, user_state['username'], "Write")
+        set_permissions_windows(upload_directory, user_state['username'], "Delete")
+    else:
+        set_permissions_windows(upload_directory, user_state['username'], "Read")
+
+    parent_dir = os.path.dirname(user_state['current_directory'])
+    client_folder = parent_dir + "\\client-folder"
+    download_directory = os.path.join(client_folder, user_state['username'])
+    if not os.path.exists(download_directory):
+        os.makedirs(download_directory)
+
+    set_permissions_windows(download_directory, user_state['username'], "Full")
 
 
 
