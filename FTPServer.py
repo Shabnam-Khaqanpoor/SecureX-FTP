@@ -1,3 +1,12 @@
+import socket
+import threading
+import os
+from datetime import datetime
+import re
+import utilities
+import ntsecuritycon as con
+from Encryption_Methods import SSL_TLS_Encryption, TLS_Encryption, SSL_Encryption
+
 # Constants defining server configurations and behavior-----------------------------------------------------------------
 HEADER = 256  # Fixed header size for receiving commands
 FORMAT = 'utf-8'  # Encoding format for communication
@@ -7,15 +16,40 @@ CONTROL_PORT = 465  # Control port for communication
 DATA_PORT = 2121  # Data port for file transfers
 BASE_DIRECTORY = 'D:\\network\\FTP\\FTP\\server-folder'  # Default server storage directory
 
+# check whether a file is transferring or not for Quit command----------------------------------------------------------
+IS_TRANSFERRING = {}
+
+# Encryption and FTP mode configurations
+ENCRYPTION_MODE = "TLS"  # Default encryption mode
+FTP_TYPE = "FTPS"  # FTP type being used
+
+# Ensures the base directory exists, creating it if necessary-----------------------------------------------------------
+if not os.path.exists(BASE_DIRECTORY):
+    os.makedirs(BASE_DIRECTORY)
+
+# Dictionary to track file locks for concurrency management
+file_locks = {}
+file_locks_lock = threading.Lock()  # Mutex for safe access to file_locks
+operation_timeout = 60  # Timeout for file operations (in seconds)
+
+
+# Function to get or create a lock for a file---------------------------------------------------------------------------
+def get_file_lock(filename):
+    """Ensures a unique lock for each file, allowing thread-safe operations."""
+    with file_locks_lock:
+        if filename not in file_locks:
+            file_locks[filename] = threading.Lock()
+        return file_locks[filename]
+
+
 #   User levels for role-based access controls--------------------------------------------------------------------------
+
 LEVEL = {
     '1': 'Super-admin',
     '2': 'Admin',
     '3': 'Promoted user',
     '4': 'Normal'
 }
-
-
 # Registered users with associated roles and credentials----------------------------------------------------------------
 VALID_USERS = {
     'user1': {'password': 'password1',
@@ -24,6 +58,83 @@ VALID_USERS = {
     'user3': {'password': 'password3', 'level': LEVEL['3']},
     'user4': {'password': 'password4', 'level': LEVEL['4']},
 }
+
+# Global variables for user states and active threads-------------------------------------------------------------------
+ZOMBIE_THREADS = {}
+
+# Commands available for admin and regular users------------------------------------------------------------------------
+ADMIN_COMMANDS = """
+Supported commands:
+  LIST                                           - List directory contents
+  RETR <filename>                                - Download a file
+  STOR <filepath> <destination_path>             - Upload a file
+  DELE <filename>                                - Delete a file
+  MKD <dirname>                                  - Create a directory
+  RMD <dirname>                                  - Remove a directory
+  PWD                                            - Print the current directory
+  CWD <dirname>                                  - Change directory
+  CDUP                                           - Move to the parent directory
+  CHANGELEVEL <username> <new_level>             - Change the level of a user
+  SETACL <file_path> <username> <permission>     - Modify a file permissions
+  QUIT                                           - Disconnect from the server\n
+"""
+# -----------------------------------------------------------------------------------------------------------------------
+USER_COMMANDS = """
+Supported commands:
+  LIST                                           - List directory contents
+  RETR <filename>                                - Download a file
+  STOR <filepath> <destination_path>             - Upload a file
+  DELE <filename>                                - Delete a file
+  MKD <dirname>                                  - Create a directory
+  RMD <dirname>                                  - Remove a directory
+  PWD                                            - Print the current directory
+  CWD <dirname>                                  - Change directory
+  CDUP                                           - Move to the parent directory
+  QUIT                                           - Disconnect from the server\n
+"""
+
+ Map of permission types for files-------------------------------------------------------------------------------------
+PERMISSIONS_MAP = {
+    "Read": con.FILE_GENERIC_READ,
+    "Write": con.FILE_GENERIC_WRITE,
+    "Full": con.FILE_ALL_ACCESS,
+    "Delete": con.DELETE,
+    "Create File": con.FILE_ADD_FILE,
+    "Create Subdirectory": con.FILE_ADD_SUBDIRECTORY
+}
+
+
+# Permission management functions---------------------------------------------------------------------------------------
+
+
+def set_permissions_windows(file_name, username, permission):
+    """Sets or updates file permissions for a user."""
+    try:
+        if username not in VALID_USERS and username != "Everyone":
+            return False
+
+        permissions = PERMISSIONS_MAP.get(permission)
+        if permissions is None:
+            return False
+
+        file_permissions = {}
+        if os.path.exists(file_name + ".perm"):
+            with open(file_name + ".perm", "r") as f:
+                file_permissions = eval(f.read())
+
+        file_permissions[username] = permissions
+
+        with open(file_name + ".perm", "w") as f:
+            f.write(str(file_permissions))
+
+        return True
+
+    except Exception as e:
+        return False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
 
 
 
