@@ -292,6 +292,55 @@ def create_user_folders(user_state):
 
     set_permissions_windows(download_directory, user_state['username'], "Full")
 
+def sign_up(command_parts, user_state, client_socket):
+    """
+    Handles user registration and sets default permissions for new users.
+    """
+    username = command_parts[1]
+    password = command_parts[2]
+
+    if username in VALID_USERS:
+        client_socket.sendall(f"450 Username already exists\n".encode(FORMAT))
+        return user_state
+
+    if len(password) < 5 or not re.search(r"[a-zA-Z]", password) or not re.search(r"\d", password):
+        client_socket.sendall(
+            f"430 Invalid password (must contain at least 5 characters, including letters and numbers)\n".encode(
+                FORMAT))
+        return user_state
+
+    VALID_USERS[username] = {'password': password}
+    user_state['username'] = username
+    user_state['authenticated'] = True
+    user_state['status'] = 'authenticated'
+
+    user_state['level'] = LEVEL.get('4')
+
+    try:
+        create_user_folders(user_state)
+
+        client_socket.sendall(f"230 Registration successful. Permissions set.\n".encode(FORMAT))
+    except Exception as e:
+        client_socket.sendall(f"450 Error setting permissions: {str(e)}\n".encode(FORMAT))
+
+    return user_state
+
+
+# -----------------------------------------------------------------------------------------------------------------------
+def set_default_permissions(file_path, user_state):
+    set_permissions_windows(file_path, user_state['username'], 'Full')
+    set_permissions_windows(file_path, LEVEL.get("4"), 'Read')
+
+    set_permissions_windows(file_path, LEVEL.get("3"), 'Read')
+    set_permissions_windows(file_path, LEVEL.get("3"), 'Write')
+
+    set_permissions_windows(file_path, LEVEL.get("2"), 'Read')
+    set_permissions_windows(file_path, LEVEL.get("2"), 'Write')
+    set_permissions_windows(file_path, LEVEL.get("2"), 'Delete')
+    set_permissions_windows(file_path, LEVEL.get("2"), 'Create File')
+
+    set_permissions_windows(file_path, LEVEL.get("1"), 'Full')
+
 
 
 
