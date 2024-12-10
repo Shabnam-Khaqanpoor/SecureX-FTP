@@ -226,6 +226,57 @@ def handle_retr(user_state, command_parts, client_socket, data_socket):
         IS_TRANSFERRING[client_socket] = False
 
 
+def handle_stor(user_state, command_parts, client_socket, data_socket):
+    """Handles file upload to the server."""
+    global IS_TRANSFERRING
+
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+
+    if command_parts[2] == ".":
+        file_path, user_state['current_directory'] = utilities.resolve_path(user_state['current_directory'],
+                                                                            user_state['username'])
+        if not os.path.isdir(file_path):
+            file_path = user_state['current_directory']
+        file_name = os.path.join(file_path, command_parts[1])
+    else:
+        file_path, _ = utilities.resolve_path(user_state['current_directory'], command_parts[2])
+        file_name = os.path.join(file_path, command_parts[1])
+
+    if not check_permission(file_path, user_state, 'Write'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    file_lock = get_file_lock(file_path)
+    try:
+        # Acquire lock with timeout
+        if not file_lock.acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{file_name}' is busy. Try again later.".encode(FORMAT))
+            return
+        client_socket.sendall(f"150 Ready to receive file data\n".encode(FORMAT))
+        conn, _ = data_socket.accept()
+        IS_TRANSFERRING[client_socket] = True
+        with open(file_name, 'wb') as file:
+            while chunk := conn.recv(1024):
+                file.write(chunk)
+        conn.close()
+        client_socket.sendall(f"226 File transfer complete\n".encode(FORMAT))
+        user_state['current_directory'] = file_path
+        set_default_permissions(file_name, user_state)
+    except Exception as e:
+        print(f"Error in STOR: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
+    finally:
+        file_lock.release()
+        IS_TRANSFERRING[client_socket] = False
+
+
+
 # Main Client Handler --------------------------------------------------------------------------------------------------
 
 def handle_client(client_socket, data_socket, addr):
