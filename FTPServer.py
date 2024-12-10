@@ -93,6 +93,49 @@ Supported commands:
   QUIT                                           - Disconnect from the server\n
 """
 
+ Map of permission types for files-------------------------------------------------------------------------------------
+PERMISSIONS_MAP = {
+    "Read": con.FILE_GENERIC_READ,
+    "Write": con.FILE_GENERIC_WRITE,
+    "Full": con.FILE_ALL_ACCESS,
+    "Delete": con.DELETE,
+    "Create File": con.FILE_ADD_FILE,
+    "Create Subdirectory": con.FILE_ADD_SUBDIRECTORY
+}
+
+
+# Permission management functions---------------------------------------------------------------------------------------
+
+
+def set_permissions_windows(file_name, username, permission):
+    """Sets or updates file permissions for a user."""
+    try:
+        if username not in VALID_USERS and username != "Everyone":
+            return False
+
+        permissions = PERMISSIONS_MAP.get(permission)
+        if permissions is None:
+            return False
+
+        file_permissions = {}
+        if os.path.exists(file_name + ".perm"):
+            with open(file_name + ".perm", "r") as f:
+                file_permissions = eval(f.read())
+
+        file_permissions[username] = permissions
+
+        with open(file_name + ".perm", "w") as f:
+            f.write(str(file_permissions))
+
+        return True
+
+    except Exception as e:
+        return False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+
 
 
 
