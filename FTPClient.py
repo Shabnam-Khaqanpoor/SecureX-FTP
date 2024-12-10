@@ -71,8 +71,42 @@ response_condition = threading.Condition()  # Condition variable for response sy
 shared_response = None  # Stores the latest response from the server
 
 
+# Function to handle user input and send messages-----------------------------------------------------------------------
+def send_message(control_socket):
+    global CURRENT_DIRECTORY
+    """
+    Reads user input, processes commands, and sends them to the server.
+    Includes command-specific handlers for file operations.
+    """
+    authentication_help()
+    while True:
+        try:
+            command = input("ftp> ").strip()
+            order = command.split(" ")[0]
+            if order.upper() == "QUIT":
+                send_command(control_socket, DISCONNECT_MESSAGE)
+                print("Disconnecting...")
+                break
+            elif order.upper() == "LIST":
+                handle_list(control_socket)
+            elif order.upper().startswith("RETR"):
+                _, filename = command.split(maxsplit=1)
+                handle_retr(control_socket, filename)
+            elif order.upper().startswith("STOR"):
+                _, filepath, destination = command.split(maxsplit=2)
+                handle_stor(control_socket, filepath, destination)
+            elif order.upper() == "DELE" or "SIGNUP" or "USER" or "PASS" or "CWD" or "CDUP" or "PWD" or "MKD" or "RMD" or "HELP" or "SETACL" or "CHANGELEVEL":
+                if order.upper() == "USER":
+                    if CURRENT_DIRECTORY == 'D:\\network\\FTP\\FTP\\client-folder':
+                        username = command.split(maxsplit=1)[1]
+                        CURRENT_DIRECTORY += f'\\{username}'
+                handle_control_socket(control_socket, command)
 
-# # Main client function with threading-----------------------------------------------------------------------------------
+        except Exception as e:
+            print("502 Command not implemented\n")
+
+
+# # Main client function with threading---------------------------------------------------------------------------------
 def client():
     """
     Entry point for the client.
