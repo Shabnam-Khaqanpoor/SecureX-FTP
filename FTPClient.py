@@ -138,6 +138,75 @@ def send_message(control_socket):
             print("502 Command not implemented\n")
 
 
+
+def receive_message(control_socket):
+    """
+  Continuously listens for messages from the server.
+  Updates the shared response variable and notifies waiting threads.
+  """
+    global shared_response
+    while True:
+        try:
+            response = control_socket.recv(1024).decode(FORMAT)
+            if not response:
+                print("Server disconnected.")
+                break
+
+            # Notify waiting threads
+            with response_condition:
+                shared_response = response
+                response_condition.notify()  # Notify one waiting thread
+
+            # Print response for logging
+            print(f"Server: {response}")
+        except ConnectionResetError:
+            print("Connection lost.")
+            break
+
+
+# Handles the LIST command to retrieve directory listings---------------------------------------------------------------
+def handle_list(control_socket):
+    """
+        Sends the LIST command to the server to get directory listings.
+        Opens a data socket to receive the listing data.
+        """
+    response = send_command(control_socket, "LIST")
+    if response:
+        if response.startswith("125"):
+            data_socket = create_data_socket()  # New socket for data transfer
+            data_socket.connect((SERVER_IP, DATA_PORT))
+            print("Directory listing:")
+            while True:
+                data = data_socket.recv(1024).decode(FORMAT)
+                if not data:
+                    break
+                print(data)
+            data_socket.close()
+
+
+# Handles the RETR command to download a file---------------------------------------------------------------------------
+
+def handle_retr(control_socket, filename):
+    """
+        Sends the RETR command to download a file from the server.
+        Saves the downloaded file in the client directory.
+        """
+    global CURRENT_DIRECTORY
+    response = send_command(control_socket, f"RETR {filename}")
+    if response:
+        if response.startswith("150"):
+            data_socket = create_data_socket()  # New socket for data transfer
+            data_socket.connect((SERVER_IP, DATA_PORT))
+            client_file, dir = utilities.resolve_path(CURRENT_DIRECTORY, filename)
+            with open(client_file, 'wb') as file:
+                while data := data_socket.recv(1024):
+                    file.write(data)
+            data_socket.close()
+            print(f"File '{filename}' downloaded successfully.")
+        else:
+            print(f"Error: {response}")
+
+
 # # Main client function with threading---------------------------------------------------------------------------------
 def client():
     """
