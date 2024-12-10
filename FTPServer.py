@@ -8,7 +8,6 @@ DATA_PORT = 2121  # Data port for file transfers
 BASE_DIRECTORY = 'D:\\network\\FTP\\FTP\\server-folder'  # Default server storage directory
 
 
-
 def start_server():
     global ENCRYPTION_MODE
     """
