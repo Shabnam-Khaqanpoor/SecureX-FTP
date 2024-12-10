@@ -7,14 +7,14 @@ import utilities
 import ntsecuritycon as con
 from Encryption_Methods import SSL_TLS_Encryption, TLS_Encryption, SSL_Encryption
 
-# # Constants defining server configurations and behavior-----------------------------------------------------------------
-# HEADER = 256  # Fixed header size for receiving commands
-# FORMAT = 'utf-8'  # Encoding format for communication
-# DISCONNECT_MESSAGE = "QUIT"  # Message to indicate disconnection
-# SERVER_IP = "127.0.0.1"  # Server IP address
-# CONTROL_PORT = 465  # Control port for communication
-# DATA_PORT = 2121  # Data port for file transfers
-# BASE_DIRECTORY = 'D:\\network\\FTP\\FTP\\server-folder'  # Default server storage directory
+# Constants defining server configurations and behavior-----------------------------------------------------------------
+HEADER = 256  # Fixed header size for receiving commands
+FORMAT = 'utf-8'  # Encoding format for communication
+DISCONNECT_MESSAGE = "QUIT"  # Message to indicate disconnection
+SERVER_IP = "127.0.0.1"  # Server IP address
+CONTROL_PORT = 465  # Control port for communication
+DATA_PORT = 2121  # Data port for file transfers
+BASE_DIRECTORY = 'D:\\network\\FTP\\FTP\\server-folder'  # Default server storage directory
 
 # check whether a file is transferring or not for Quit command----------------------------------------------------------
 IS_TRANSFERRING = {}
@@ -44,20 +44,20 @@ def get_file_lock(filename):
 
 #   User levels for role-based access controls--------------------------------------------------------------------------
 
-# LEVEL = {
-#     '1': 'Super-admin',
-#     '2': 'Admin',
-#     '3': 'Promoted user',
-#     '4': 'Normal'
-# }
-# # Registered users with associated roles and credentials----------------------------------------------------------------
-# VALID_USERS = {
-#     'user1': {'password': 'password1',
-#               'level': LEVEL['1']},
-#     'user2': {'password': 'password2', 'level': LEVEL['2']},
-#     'user3': {'password': 'password3', 'level': LEVEL['3']},
-#     'user4': {'password': 'password4', 'level': LEVEL['4']},
-# }
+LEVEL = {
+    '1': 'Super-admin',
+    '2': 'Admin',
+    '3': 'Promoted user',
+    '4': 'Normal'
+}
+# Registered users with associated roles and credentials----------------------------------------------------------------
+VALID_USERS = {
+    'user1': {'password': 'password1',
+              'level': LEVEL['1']},
+    'user2': {'password': 'password2', 'level': LEVEL['2']},
+    'user3': {'password': 'password3', 'level': LEVEL['3']},
+    'user4': {'password': 'password4', 'level': LEVEL['4']},
+}
 
 # Global variables for user states and active threads-------------------------------------------------------------------
 ZOMBIE_THREADS = {}
