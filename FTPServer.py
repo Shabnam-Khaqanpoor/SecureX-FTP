@@ -36,6 +36,62 @@ def handle_client(client_socket, data_socket, addr):
         'level': None
     }
 
+client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
+
+    connected = True
+    while connected:
+        try:
+            msg_length = client_socket.recv(HEADER).decode(FORMAT)
+            if msg_length:
+                msg_length = int(msg_length)
+                command = client_socket.recv(msg_length).decode(FORMAT)
+                print(f"[{addr}] said: {command}\n")
+                command_parts = command.split()
+                cmd = command_parts[0].upper()
+
+                if cmd == "SIGNUP":
+                    user_state = sign_up(command_parts, user_state, client_socket)
+                elif cmd == "USER":
+                    user_state = handle_user(command_parts, user_state, client_socket)
+                elif cmd == "PASS":
+                    user_state = handle_pass(command_parts, user_state, client_socket)
+                elif cmd == "LIST":
+                    handle_list(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "RETR":
+                    handle_retr(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "STOR":
+                    handle_stor(user_state, command_parts, client_socket, data_socket)
+                elif cmd == "DELE":
+                    handle_delete(user_state, command_parts, client_socket)
+                elif cmd == "MKD":
+                    handle_mkd(user_state, command_parts, client_socket)
+                elif cmd == "RMD":
+                    handle_rmd(user_state, command_parts, client_socket)
+                elif cmd == "PWD":
+                    handle_pwd(user_state, client_socket)
+                elif cmd == "CWD":
+                    handle_cwd(user_state, command_parts, client_socket)
+                elif cmd == "CDUP":
+                    handle_cdup(user_state, client_socket)
+                elif cmd == "SETACL" and user_state['level'] == LEVEL.get('1'):
+                    handle_setacl(command_parts, client_socket, user_state)
+                elif cmd == "CHANGELEVEL" and user_state['level'] == LEVEL.get('1'):
+                    change_user_level(command_parts, user_state, client_socket)
+                elif cmd == "HELP":
+                    handle_help(user_state, client_socket)
+                elif cmd == "QUIT":
+                    if IS_TRANSFERRING[client_socket]:
+                        client_socket.sendall(f"[WARNING!] Cannot quit during file transfer.\n".encode(FORMAT))
+                    else:
+                        client_socket.sendall(f"221 Goodbye\n".encode(FORMAT))
+                        connected = False
+                else:
+                    client_socket.sendall(f"502 Command not implemented\n".encode(FORMAT))
+        except Exception as e:
+            print(f"Error handling client {addr}: {e}")
+            connected = False
+
+
 
 def start_server():
     global ENCRYPTION_MODE
