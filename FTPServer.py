@@ -184,6 +184,45 @@ def get_permissions(file_name, client_socket):
     except Exception as e:
         client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
 
+def handle_setacl(command_parts, client_socket, user_state):
+    """
+    Handles the SETACL command to modify file permissions.
+    Usage: SETACL <file_path> <username> <permission>
+    """
+
+    if user_state['level'] != LEVEL.get('1'):
+        client_socket.sendall(f"530 Permission denied. Only Super Admin can change user levels.\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 4:
+        client_socket.sendall(f"501 Syntax error in parameters\n".encode())
+        return
+
+    file_path, directory = utilities.resolve_path(user_state['current_directory'],
+                                                  command_parts[1])  # Simplified without util.resolve_path
+    username = command_parts[2]
+    permission = command_parts[3]
+
+    if permission not in PERMISSIONS_MAP:
+        client_socket.sendall(
+            f"501 Invalid permission '{permission}'. Allowed: {list(PERMISSIONS_MAP.keys())}\n".encode())
+        return
+
+    if not os.path.exists(file_path):
+        client_socket.sendall(f"550 File '{file_path}' not found\n".encode())
+        return
+
+    try:
+        success = set_permissions_windows(file_path, username, permission)
+        if success:
+            client_socket.sendall(f"250 Permissions updated for {username} on {file_path}\n".encode())
+        else:
+            client_socket.sendall(f"450 Failed to update permissions\n".encode())
+    except Exception as e:
+        client_socket.sendall(f"450 Failed to update permissions: {e}\n".encode())
+
+
+
 
 
 
