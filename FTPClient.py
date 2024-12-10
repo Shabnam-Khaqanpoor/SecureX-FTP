@@ -71,6 +71,33 @@ response_condition = threading.Condition()  # Condition variable for response sy
 shared_response = None  # Stores the latest response from the server
 
 
+
+def send_command(control_socket, command):
+    """
+        Sends a command to the server and waits for its response.
+        Uses threading condition to synchronize with the response receiver.
+        """
+    global shared_response
+    with response_condition:
+        # Send the command
+        message = command.encode(FORMAT)
+        message_length = len(message)
+        control_socket.sendall(f"{message_length:<{HEADER}}".encode(FORMAT))
+        control_socket.sendall(message)
+
+        # Wait for the response
+        response_condition.wait(timeout=3)  # Wait for notify or timeout
+
+        # Check if a response was set
+        if shared_response:
+            response = shared_response
+            shared_response = None  # Reset shared response
+            return response
+        else:
+            print("Error: No response from server.")
+            return None
+
+
 # Handles the STOR command to upload a file-----------------------------------------------------------------------------
 
 def handle_stor(control_socket, origin_path, destination):
