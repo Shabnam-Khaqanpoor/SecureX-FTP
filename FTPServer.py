@@ -25,6 +25,18 @@ VALID_USERS = {
 }
 
 
+
+def handle_client(client_socket, data_socket, addr):
+    """Manages the lifecycle of a client connection."""
+    user_state = {
+        'username': None,
+        'authenticated': False,
+        'status': None,
+        'current_directory': BASE_DIRECTORY,
+        'level': None
+    }
+
+
 def start_server():
     global ENCRYPTION_MODE
     """
