@@ -17,11 +17,24 @@ def start_server():
     control_socket = None
     data_socket = None
 
+    if ENCRYPTION_MODE == "SSL":
+        control_socket = SSL_Encryption.ssl_control_connection_server()
+        data_socket = SSL_Encryption.ssl_data_connection_server()
 
+    if ENCRYPTION_MODE == "SSL/TLS":
+        control_socket = SSL_TLS_Encryption.ssl_tls_control_connection_server()
+        data_socket = SSL_TLS_Encryption.ssl_tls_data_connection_server()
 
-      # its PLAIN mode without any encryption protocol
-    control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    elif ENCRYPTION_MODE == "SSH":  # todo;fix this shit
+        pass
+
+    elif ENCRYPTION_MODE == "TLS":
+        control_socket = TLS_Encryption.tls_control_connection_server()
+        data_socket = TLS_Encryption.tls_data_connection_server()
+
+    else:  # its PLAIN mode without any encryption protocol
+        control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     control_socket.bind((SERVER_IP, CONTROL_PORT))
     data_socket.bind((SERVER_IP, DATA_PORT))
