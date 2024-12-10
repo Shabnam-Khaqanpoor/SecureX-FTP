@@ -162,7 +162,27 @@ def check_permission(file_perm, user_state, permission):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+def get_permissions(file_name, client_socket):
+    """Retrieves and formats file permissions for output."""
+    try:
+        if not os.path.exists(file_name + ".perm"):
+            return
 
+        with open(file_name + ".perm", "r") as f:
+            file_permissions = eval(f.read())
+
+        result = []
+        for user, perm in file_permissions.items():
+            user_perms = [k for k, v in PERMISSIONS_MAP.items() if v & perm]
+            result.append(f"{user}: {', '.join(user_perms)}")
+
+        if result:
+            return ','.join(result) + '\n'
+        else:
+            return
+
+    except Exception as e:
+        client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
 
 
 
