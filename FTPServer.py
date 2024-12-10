@@ -26,6 +26,9 @@ VALID_USERS = {
 
 
 
+
+# Main Client Handler --------------------------------------------------------------------------------------------------
+
 def handle_client(client_socket, data_socket, addr):
     """Manages the lifecycle of a client connection."""
     user_state = {
@@ -36,7 +39,7 @@ def handle_client(client_socket, data_socket, addr):
         'level': None
     }
 
-client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
+    client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
 
     connected = True
     while connected:
@@ -91,7 +94,10 @@ client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
             print(f"Error handling client {addr}: {e}")
             connected = False
 
-
+    client_socket.close()
+    print(f"[DISCONNECTED] {addr} disconnected.")
+    current_thread = threading.current_thread()
+    ZOMBIE_THREADS[str(current_thread)] = current_thread
 
 def start_server():
     global ENCRYPTION_MODE
