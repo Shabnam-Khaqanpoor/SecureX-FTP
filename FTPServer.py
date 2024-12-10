@@ -134,6 +134,8 @@ def set_permissions_windows(file_name, username, permission):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+
+
 def check_permission(file_perm, user_state, permission):
     """Checks if a user has the specified permission on a file."""
     try:
@@ -184,6 +186,17 @@ def get_permissions(file_name, client_socket):
     except Exception as e:
         client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
 
+
+# Command handlers for various FTP operations---------------------------------------------------------------------------
+def handle_help(user_state, client_socket):
+    """Displays a list of available commands based on user role."""
+    level = user_state['level']
+    commands = ADMIN_COMMANDS if level == LEVEL['1'] or level == LEVEL['2'] else USER_COMMANDS
+
+    client_socket.sendall(f"{commands}\n".encode(FORMAT))
+
+
+# -----------------------------------------------------------------------------------------------------------------------
 def handle_setacl(command_parts, client_socket, user_state):
     """
     Handles the SETACL command to modify file permissions.
@@ -221,6 +234,8 @@ def handle_setacl(command_parts, client_socket, user_state):
     except Exception as e:
         client_socket.sendall(f"450 Failed to update permissions: {e}\n".encode())
 
+
+# -----------------------------------------------------------------------------------------------------------------------
 def change_user_level(command_parts, user_state, client_socket):
     """
     تغییر سطح دسترسی یک کاربر.
@@ -262,6 +277,8 @@ def change_user_level(command_parts, user_state, client_socket):
     VALID_USERS[target_user]['level'] = LEVEL.get(new_level)
     client_socket.sendall(f"250 User '{target_user}' level changed to '{LEVEL.get(new_level)}'.\n".encode(FORMAT))
 
+
+# -----------------------------------------------------------------------------------------------------------------------
 def create_user_folders(user_state):
     file_name, par = utilities.resolve_path(BASE_DIRECTORY, user_state['username'])
     if os.path.isdir(file_name):
@@ -291,6 +308,10 @@ def create_user_folders(user_state):
         os.makedirs(download_directory)
 
     set_permissions_windows(download_directory, user_state['username'], "Full")
+
+
+#     -----------------------------------------------------------------------------------------------------------------------
+
 
 def sign_up(command_parts, user_state, client_socket):
     """
@@ -342,6 +363,9 @@ def set_default_permissions(file_path, user_state):
     set_permissions_windows(file_path, LEVEL.get("1"), 'Full')
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+
+
 def handle_user(command_parts, user_state, client_socket):
     """Handles user login by username."""
     username = command_parts[1]
@@ -376,131 +400,142 @@ def handle_pass(command_parts, user_state, client_socket):
         return user_state
 
 
+# ----------------------------------------------------------------------------------------------------------------------
 
+def handle_list(user_state, command_parts, client_socket, data_socket):
+    """Lists files in the current or specified directory."""
+    global IS_TRANSFERRING
 
-# Main Client Handler --------------------------------------------------------------------------------------------------
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
 
-def handle_client(client_socket, data_socket, addr):
-    """Manages the lifecycle of a client connection."""
-    user_state = {
-        'username': None,
-        'authenticated': False,
-        'status': None,
-        'current_directory': BASE_DIRECTORY,
-        'level': None
-    }
+    directory = user_state['current_directory']
+    if len(command_parts) > 1:
+        _, directory = utilities.resolve_path(directory, command_parts[1])
 
-    client_socket.sendall(f"220 FTP Server Ready\n".encode(FORMAT))
+    if not os.path.isdir(directory):
+        client_socket.sendall(f"550 Directory not found\n".encode(FORMAT))
+        return
 
-    connected = True
-    while connected:
-        try:
-            msg_length = client_socket.recv(HEADER).decode(FORMAT)
-            if msg_length:
-                msg_length = int(msg_length)
-                command = client_socket.recv(msg_length).decode(FORMAT)
-                print(f"[{addr}] said: {command}\n")
-                command_parts = command.split()
-                cmd = command_parts[0].upper()
-
-                if cmd == "SIGNUP":
-                    user_state = sign_up(command_parts, user_state, client_socket)
-                elif cmd == "USER":
-                    user_state = handle_user(command_parts, user_state, client_socket)
-                elif cmd == "PASS":
-                    user_state = handle_pass(command_parts, user_state, client_socket)
-                elif cmd == "LIST":
-                    handle_list(user_state, command_parts, client_socket, data_socket)
-                elif cmd == "RETR":
-                    handle_retr(user_state, command_parts, client_socket, data_socket)
-                elif cmd == "STOR":
-                    handle_stor(user_state, command_parts, client_socket, data_socket)
-                elif cmd == "DELE":
-                    handle_delete(user_state, command_parts, client_socket)
-                elif cmd == "MKD":
-                    handle_mkd(user_state, command_parts, client_socket)
-                elif cmd == "RMD":
-                    handle_rmd(user_state, command_parts, client_socket)
-                elif cmd == "PWD":
-                    handle_pwd(user_state, client_socket)
-                elif cmd == "CWD":
-                    handle_cwd(user_state, command_parts, client_socket)
-                elif cmd == "CDUP":
-                    handle_cdup(user_state, client_socket)
-                elif cmd == "SETACL" and user_state['level'] == LEVEL.get('1'):
-                    handle_setacl(command_parts, client_socket, user_state)
-                elif cmd == "CHANGELEVEL" and user_state['level'] == LEVEL.get('1'):
-                    change_user_level(command_parts, user_state, client_socket)
-                elif cmd == "HELP":
-                    handle_help(user_state, client_socket)
-                elif cmd == "QUIT":
-                    if IS_TRANSFERRING[client_socket]:
-                        client_socket.sendall(f"[WARNING!] Cannot quit during file transfer.\n".encode(FORMAT))
-                    else:
-                        client_socket.sendall(f"221 Goodbye\n".encode(FORMAT))
-                        connected = False
-                else:
-                    client_socket.sendall(f"502 Command not implemented\n".encode(FORMAT))
-        except Exception as e:
-            print(f"Error handling client {addr}: {e}")
-            connected = False
-
-    client_socket.close()
-    print(f"[DISCONNECTED] {addr} disconnected.")
-    current_thread = threading.current_thread()
-    ZOMBIE_THREADS[str(current_thread)] = current_thread
-
-
-
-def start_server():
-    global ENCRYPTION_MODE
-    """
-    Starts the FTP server, listens for connections, and spawns client threads.
-    """
-    control_socket = None
-    data_socket = None
-
-    if ENCRYPTION_MODE == "SSL":
-        control_socket = SSL_Encryption.ssl_control_connection_server()
-        data_socket = SSL_Encryption.ssl_data_connection_server()
-
-    if ENCRYPTION_MODE == "SSL/TLS":
-        control_socket = SSL_TLS_Encryption.ssl_tls_control_connection_server()
-        data_socket = SSL_TLS_Encryption.ssl_tls_data_connection_server()
-
-    elif ENCRYPTION_MODE == "SSH":  # todo;fix this shit
-        pass
-
-    elif ENCRYPTION_MODE == "TLS":
-        control_socket = TLS_Encryption.tls_control_connection_server()
-        data_socket = TLS_Encryption.tls_data_connection_server()
-
-    else:  # its PLAIN mode without any encryption protocol
-        control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    control_socket.bind((SERVER_IP, CONTROL_PORT))
-    data_socket.bind((SERVER_IP, DATA_PORT))
-    control_socket.listen()
-    data_socket.listen()
-
-    print(
-        f"{FTP_TYPE} is listening. Control on {SERVER_IP}:{CONTROL_PORT}, Data on {SERVER_IP}:{DATA_PORT}")
-
+    client_socket.sendall(f"125 Here comes the directory listing\n".encode(FORMAT))
+    conn, addr = data_socket.accept()  # Accept the data connection
     try:
-        while True:
-            client_socket, addr = control_socket.accept()
-            print(f"[NEW CONNECTION] {addr} connected.")
-            thread = threading.Thread(target=handle_client, args=(client_socket, data_socket, addr))
-            thread.start()
-            print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
-            for thread in list(ZOMBIE_THREADS):  # Copy keys to avoid dictionary modification during iteration
-                if not ZOMBIE_THREADS[thread].is_alive():
-                    ZOMBIE_THREADS[thread].join()  # Join the finished client thread
-                    del ZOMBIE_THREADS[thread]
-
-    except KeyboardInterrupt:
-        print("\n[SHUTDOWN] Server is shutting down.")
+        IS_TRANSFERRING[client_socket] = True
+        for item in os.listdir(directory):
+            if item.endswith('.perm'):
+                continue
+            item_path = os.path.join(directory, item)
+            permissions = get_permissions(item_path, client_socket)
+            size = os.path.getsize(item_path)
+            mod_time = datetime.fromtimestamp(os.path.getmtime(item_path)).strftime("%b %d %H:%M")
+            conn.sendall(
+                f"permissions: {permissions}     size: {size}     modified time: {mod_time}     items: {item}\n".encode(
+                    FORMAT))
+        conn.close()
+        client_socket.sendall(f"226 Directory send OK\n".encode(FORMAT))
+    except Exception as e:
+        print(f"Error in LIST: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
     finally:
-        control_socket.close()
-        data_socket.close()
+        IS_TRANSFERRING[client_socket] = False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_retr(user_state, command_parts, client_socket, data_socket):
+    """Facilitates downloading a file from the server."""
+    global IS_TRANSFERRING
+
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+    filename = command_parts[1]
+    filepath, user_state['current_directory'] = utilities.resolve_path(user_state['current_directory'], filename)
+
+    if not os.path.isfile(filepath):
+        client_socket.sendall(f"550 File not found\n".encode(FORMAT))
+        return
+
+    if not check_permission(filepath, user_state, 'Read'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    file_lock = get_file_lock(filepath)
+    try:
+        # Acquire lock with timeout
+        if not file_lock.acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{filename}' is busy. Try again later.".encode(FORMAT))
+            return
+
+        client_socket.sendall(f"150 Opening data connection\n".encode(FORMAT))
+        conn, _ = data_socket.accept()
+        IS_TRANSFERRING[client_socket] = True
+        with open(filepath, 'rb') as file:
+            while chunk := file.read(1024):
+                conn.sendall(chunk)
+        conn.close()
+
+        client_socket.sendall(f"226 Transfer complete\n".encode(FORMAT))
+    except Exception as e:
+        print(f"Error in RETR: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
+    finally:
+        file_lock.release()
+        IS_TRANSFERRING[client_socket] = False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_stor(user_state, command_parts, client_socket, data_socket):
+    """Handles file upload to the server."""
+    global IS_TRANSFERRING
+
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+
+    if command_parts[2] == ".":
+        file_path, user_state['current_directory'] = utilities.resolve_path(user_state['current_directory'],
+                                                                            user_state['username'])
+        if not os.path.isdir(file_path):
+            file_path = user_state['current_directory']
+        file_name = os.path.join(file_path, command_parts[1])
+    else:
+        file_path, _ = utilities.resolve_path(user_state['current_directory'], command_parts[2])
+        file_name = os.path.join(file_path, command_parts[1])
+
+    if not check_permission(file_path, user_state, 'Write'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    file_lock = get_file_lock(file_path)
+    try:
+        # Acquire lock with timeout
+        if not file_lock.acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{file_name}' is busy. Try again later.".encode(FORMAT))
+            return
+        client_socket.sendall(f"150 Ready to receive file data\n".encode(FORMAT))
+        conn, _ = data_socket.accept()
+        IS_TRANSFERRING[client_socket] = True
+        with open(file_name, 'wb') as file:
+            while chunk := conn.recv(1024):
+                file.write(chunk)
+        conn.close()
+        client_socket.sendall(f"226 File transfer complete\n".encode(FORMAT))
+        user_state['current_directory'] = file_path
+        set_default_permissions(file_name, user_state)
+    except Exception as e:
+        print(f"Error in STOR: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
+    finally:
+        file_lock.release()
+        IS_TRANSFERRING[client_socket] = False
