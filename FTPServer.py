@@ -180,6 +180,52 @@ def handle_list(user_state, command_parts, client_socket, data_socket):
         IS_TRANSFERRING[client_socket] = False
 
 
+def handle_retr(user_state, command_parts, client_socket, data_socket):
+    """Facilitates downloading a file from the server."""
+    global IS_TRANSFERRING
+
+    if not user_state['authenticated']:
+        client_socket.sendall(f"530 Not logged in\n".encode(FORMAT))
+        return
+
+    if len(command_parts) < 2:
+        client_socket.sendall(f"501 Syntax error in parameters or arguments\n".encode(FORMAT))
+        return
+    filename = command_parts[1]
+    filepath, user_state['current_directory'] = utilities.resolve_path(user_state['current_directory'], filename)
+
+    if not os.path.isfile(filepath):
+        client_socket.sendall(f"550 File not found\n".encode(FORMAT))
+        return
+
+    if not check_permission(filepath, user_state, 'Read'):
+        client_socket.sendall(f"550 Permission denied\n".encode(FORMAT))
+        return
+
+    file_lock = get_file_lock(filepath)
+    try:
+        # Acquire lock with timeout
+        if not file_lock.acquire(timeout=operation_timeout):
+            client_socket.send(f"450 File '{filename}' is busy. Try again later.".encode(FORMAT))
+            return
+
+        client_socket.sendall(f"150 Opening data connection\n".encode(FORMAT))
+        conn, _ = data_socket.accept()
+        IS_TRANSFERRING[client_socket] = True
+        with open(filepath, 'rb') as file:
+            while chunk := file.read(1024):
+                conn.sendall(chunk)
+        conn.close()
+
+        client_socket.sendall(f"226 Transfer complete\n".encode(FORMAT))
+    except Exception as e:
+        print(f"Error in RETR: {e}")
+        client_socket.sendall(f"450 Transfer failed\n".encode(FORMAT))
+    finally:
+        file_lock.release()
+        IS_TRANSFERRING[client_socket] = False
+
+
 # Main Client Handler --------------------------------------------------------------------------------------------------
 
 def handle_client(client_socket, data_socket, addr):
