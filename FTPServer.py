@@ -342,6 +342,40 @@ def set_default_permissions(file_path, user_state):
     set_permissions_windows(file_path, LEVEL.get("1"), 'Full')
 
 
+def handle_user(command_parts, user_state, client_socket):
+    """Handles user login by username."""
+    username = command_parts[1]
+    if username in VALID_USERS:
+        user_state['username'] = username
+        user_state['status'] = 'waiting_for_pass'
+        client_socket.sendall(f"331 Username OK, need password\n".encode(FORMAT))
+    else:
+        client_socket.sendall(f"530 Invalid username\n".encode(FORMAT))
+
+    return user_state
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def handle_pass(command_parts, user_state, client_socket):
+    """Handles user password verification."""
+    if user_state['status'] == 'waiting_for_pass':
+        password = command_parts[1]
+        username = user_state['username']
+        if username in VALID_USERS:
+            if VALID_USERS[username]['password'] == password:
+                user_state['authenticated'] = True
+                user_state['status'] = 'authenticated'
+                user_state['level'] = VALID_USERS[username]['level']
+                create_user_folders(user_state)
+                client_socket.sendall(f"230 User logged in, proceed\n".encode(FORMAT))
+            else:
+                client_socket.sendall(f"530 Login incorrect\n".encode(FORMAT))
+        else:
+            client_socket.sendall(f"530 Please enter USER command first\n".encode(FORMAT))
+        return user_state
+
+
 
 
 # Main Client Handler --------------------------------------------------------------------------------------------------
