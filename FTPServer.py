@@ -7,6 +7,22 @@ CONTROL_PORT = 465  # Control port for communication
 DATA_PORT = 2121  # Data port for file transfers
 BASE_DIRECTORY = 'D:\\network\\FTP\\FTP\\server-folder'  # Default server storage directory
 
+#   User levels for role-based access controls--------------------------------------------------------------------------
+LEVEL = {
+    '1': 'Super-admin',
+    '2': 'Admin',
+    '3': 'Promoted user',
+    '4': 'Normal'
+}
+
+# Registered users with associated roles and credentials----------------------------------------------------------------
+VALID_USERS = {
+    'user1': {'password': 'password1',
+              'level': LEVEL['1']},
+    'user2': {'password': 'password2', 'level': LEVEL['2']},
+    'user3': {'password': 'password3', 'level': LEVEL['3']},
+    'user4': {'password': 'password4', 'level': LEVEL['4']},
+}
 
 
 def start_server():
