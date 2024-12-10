@@ -93,7 +93,7 @@ Supported commands:
   QUIT                                           - Disconnect from the server\n
 """
 
- # Map of permission types for files-------------------------------------------------------------------------------------
+# Map of permission types for files-------------------------------------------------------------------------------------
 PERMISSIONS_MAP = {
     "Read": con.FILE_GENERIC_READ,
     "Write": con.FILE_GENERIC_WRITE,
@@ -161,30 +161,6 @@ def check_permission(file_perm, user_state, permission):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-
-def get_permissions(file_name, client_socket):
-    """Retrieves and formats file permissions for output."""
-    try:
-        if not os.path.exists(file_name + ".perm"):
-            return
-
-        with open(file_name + ".perm", "r") as f:
-            file_permissions = eval(f.read())
-
-        result = []
-        for user, perm in file_permissions.items():
-            user_perms = [k for k, v in PERMISSIONS_MAP.items() if v & perm]
-            result.append(f"{user}: {', '.join(user_perms)}")
-
-        if result:
-            return ','.join(result) + '\n'
-        else:
-            return
-
-    except Exception as e:
-        client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
-
-
 
 
 
@@ -262,6 +238,7 @@ def handle_client(client_socket, data_socket, addr):
     print(f"[DISCONNECTED] {addr} disconnected.")
     current_thread = threading.current_thread()
     ZOMBIE_THREADS[str(current_thread)] = current_thread
+
 
 
 def start_server():
