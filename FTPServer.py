@@ -93,7 +93,7 @@ Supported commands:
   QUIT                                           - Disconnect from the server\n
 """
 
- Map of permission types for files-------------------------------------------------------------------------------------
+ # Map of permission types for files-------------------------------------------------------------------------------------
 PERMISSIONS_MAP = {
     "Read": con.FILE_GENERIC_READ,
     "Write": con.FILE_GENERIC_WRITE,
@@ -134,6 +134,58 @@ def set_permissions_windows(file_name, username, permission):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+def check_permission(file_perm, user_state, permission):
+    """Checks if a user has the specified permission on a file."""
+    try:
+        if user_state['username'] not in VALID_USERS:
+            return False
+
+        permissions = PERMISSIONS_MAP.get(permission)
+        if permissions is None:
+            return False
+
+        if not os.path.exists(file_perm + ".perm"):
+            return False
+
+        with open(file_perm + ".perm", "r") as f:
+            file_permissions = eval(f.read())
+
+        permissions_list = file_permissions.get(user_state['username']) or file_permissions.get('Everyone')
+        if permissions_list == permissions or permissions_list == PERMISSIONS_MAP.get('Full'):
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        return False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def get_permissions(file_name, client_socket):
+    """Retrieves and formats file permissions for output."""
+    try:
+        if not os.path.exists(file_name + ".perm"):
+            return
+
+        with open(file_name + ".perm", "r") as f:
+            file_permissions = eval(f.read())
+
+        result = []
+        for user, perm in file_permissions.items():
+            user_perms = [k for k, v in PERMISSIONS_MAP.items() if v & perm]
+            result.append(f"{user}: {', '.join(user_perms)}")
+
+        if result:
+            return ','.join(result) + '\n'
+        else:
+            return
+
+    except Exception as e:
+        client_socket.sendall(f"450 Error retrieving permissions: {e}\n".encode())
+
+
+
 
 
 
