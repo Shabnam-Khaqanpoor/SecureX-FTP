@@ -46,7 +46,7 @@ Ensure you have:
 
 ### **2️⃣ Clone the Repository**
 ```bash
-git clone https://github.com/Erfan-fn/SecureX-FTP.git
+git clone https://github.com/Shabnam-Khaqanpoor/SecureX-FTP.git
 cd SecureX-FTP
 ```
 
